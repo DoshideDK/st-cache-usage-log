@@ -7,7 +7,7 @@
     "js": "index.js",
     "css": "style.css",
     "author": "dk",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "homePage": "https://github.com/DoshideDK/st-cache-usage-log",
     "auto_update": false
 }

@@ -301,11 +301,12 @@ function renderBadge(id) {
     const rec = ctx().chat[id]?.extra?.cache_usage;
     if (!rec) return;
     const cls = rec.cacheRead > 0 ? 'cul-hit' : (rec.cacheWrite > 0 ? 'cul-write' : 'cul-miss');
-    const badge = $(`<div class="mes_button cul-badge ${cls}"></div>`)
-        .text(`写${short(rec.cacheWrite)} 读${short(rec.cacheRead)} 未${short(rec.input)} ${pct(rec.hitRate)}`)
+    const badge = $(`<div class="cul-badge ${cls}"></div>`)
+        .text(`写${short(rec.cacheWrite)} 读${short(rec.cacheRead)} 未${short(rec.input)} 出${short(rec.output)} ${pct(rec.hitRate)}`)
         .attr('title', detailText(rec));
-    const edit = el.find('.mes_buttons .mes_edit');
-    if (edit.length) edit.before(badge); else el.find('.mes_buttons').append(badge);
+    // 放在 .mes_buttons 外面（它默认悬停才显示），保证常驻可见
+    const buttons = el.find('.mes_buttons').first();
+    if (buttons.length) buttons.before(badge); else el.find('.ch_name').first().append(badge);
 }
 
 function renderAllBadges() {
@@ -368,7 +369,7 @@ function buildSettingsHtml() {
         </div>
         <div class="inline-drawer-content">
           <label class="checkbox_label"><input id="cul_enabled" type="checkbox" /><span>启用记录</span></label>
-          <label class="checkbox_label"><input id="cul_badge" type="checkbox" /><span>在消息编辑按钮旁显示（悬停看详情）</span></label>
+          <label class="checkbox_label"><input id="cul_badge" type="checkbox" /><span>在消息编辑按钮旁常驻显示</span></label>
           <div class="cul-row">
             <span>保留条数</span>
             <input id="cul_max" class="text_pole" type="number" min="1" max="5000" style="width:80px" />

@@ -56,19 +56,25 @@
     border-bottom: 1px solid var(--SmartThemeBorderColor, #444);
 }
 
-/* 消息按钮栏里的用量徽章 */
-.mes_buttons .cul-badge {
+/* 消息按钮栏旁的用量徽章（常驻显示，不依赖悬停） */
+.mes .cul-badge {
+    display: inline-flex !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    flex-shrink: 0;
+    align-self: center;
+    margin: 0 6px;
+    padding: 0 4px;
     font-size: 0.75em;
     font-family: monospace;
     white-space: nowrap;
-    align-self: center;
-    cursor: help;
+    cursor: default;
 }
 
-.mes_buttons .cul-badge.cul-hit {
+.mes .cul-badge.cul-hit {
     color: #6c6;
 }
 
-.mes_buttons .cul-badge.cul-write {
+.mes .cul-badge.cul-write {
     color: #e9a;
 }
