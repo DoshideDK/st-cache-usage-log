@@ -84,10 +84,13 @@ function mergeUsage(acc, u) {
     // OpenAI 兼容
     if (u.prompt_tokens !== undefined) {
         acc.format = acc.format || 'openai';
+        // OpenAI 格式的 prompt_tokens 是总输入，已经包含缓存读取和缓存写入，
+        // 未缓存输入 = 总 - R - W（否则 W 会被重复计入 ↑ 和总输入）
         const cached = num(u.prompt_tokens_details?.cached_tokens) ?? 0;
+        const written = num(u.prompt_tokens_details?.cache_write_tokens) ?? 0;
         set('cacheRead', cached);
-        set('input', num(u.prompt_tokens) - cached);
-        set('cacheWrite', u.prompt_tokens_details?.cache_write_tokens);
+        set('cacheWrite', written);
+        set('input', Math.max(0, (num(u.prompt_tokens) ?? 0) - cached - written));
     }
     set('output', u.completion_tokens);
     set('reasoning', u.completion_tokens_details?.reasoning_tokens);
@@ -151,15 +154,19 @@ async function parseJson(response, acc) {
 //  记录
 // ------------------------------------------------------------
 function finalize(acc, reqInfo) {
-    const input = acc.input ?? 0;
     const cacheWrite = acc.cacheWrite ?? 0;
     const cacheRead = acc.cacheRead ?? 0;
+    // Claude 格式：按实际接入的中转（cliproxyapi）行为，input_tokens 视为总输入，
+    // ↑ 未缓存输入 = 总 - R - W（OpenAI 格式已在 mergeUsage 里减过）
+    let input = acc.input ?? 0;
+    if (acc.format !== 'openai') input = Math.max(0, input - cacheRead - cacheWrite);
     const totalInput = input + cacheWrite + cacheRead;
     return {
         time: Date.now(),
         model: acc.model || reqInfo.model || '',
         source: reqInfo.source || '',
         provider: acc.provider || '',
+        format: acc.format || '',
         stream: reqInfo.stream,
         found: !!acc.found,
         totalInput,
