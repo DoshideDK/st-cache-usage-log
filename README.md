@@ -26,6 +26,6 @@ SillyTavern 第三方扩展：只记录每次生成返回的 usage —— 缓存
 扩展 → 安装扩展 → 填 `https://github.com/DoshideDK/st-cache-usage-log`；或者把本目录复制/软链到
 `SillyTavern/public/scripts/extensions/third-party/st-cache-usage-log`（或 `data/<用户>/extensions/`）后刷新页面。
 
-每条 AI 回复的按钮栏（编辑✏️按钮左侧）会常驻一个小徽章，如 `写0 读49.0k 未1.8k 96.4%`，鼠标悬停看完整明细。数据写在该消息的 `extra.cache_usage` 里，随聊天存档持久化，刷新/切换聊天/切换 swipe 都在。
+每条 AI 回复的编辑按钮左侧会常驻一条用量，如 `↑12 ↓2.5k R29k W13k CH95.6% $0.095`（↑未缓存输入 ↓输出 R缓存读取 W缓存写入 CH命中率，最后是费用：仅当上游返回 cost 时显示）。数据写在该消息的 `extra.cache_usage` 里，随聊天存档持久化，刷新/切换聊天/切换 swipe 都在。
 
 设置面板在「扩展」页右侧栏：「缓存用量记录」。记录保存在扩展设置里，可设置保留条数、清空、导出 JSON。

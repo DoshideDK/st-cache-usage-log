@@ -180,7 +180,6 @@ function addRecord(rec) {
     s.records.unshift(rec);
     if (s.records.length > s.maxRecords) s.records.length = s.maxRecords;
     save();
-    render();
     console.log(LOG, rec);
     if (rec.found) {
         pending.usage = rec;
@@ -263,34 +262,17 @@ function installFetchHook() {
 // ------------------------------------------------------------
 //  UI
 // ------------------------------------------------------------
-function fmt(n) {
-    return n === undefined || n === null ? '—' : `${Number(n).toLocaleString()} tok`;
-}
-function pct(r) {
-    return `${(r * 100).toFixed(1)}%`;
-}
-function esc(s) {
-    return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-}
-
 function short(n) {
     n = Number(n) || 0;
-    return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+    const f = (v, u) => `${v < 10 ? +v.toFixed(1) : Math.round(v)}${u}`;
+    if (n >= 1e6) return f(n / 1e6, 'M');
+    if (n >= 1e3) return f(n / 1e3, 'k');
+    return String(n);
 }
 
-function detailText(rec) {
-    const w = rec.cacheWrite5m || rec.cacheWrite1h ? ` (5m ${rec.cacheWrite5m ?? 0} / 1h ${rec.cacheWrite1h ?? 0})` : '';
-    return [
-        `总输入      ${fmt(rec.totalInput)}`,
-        `缓存创建    ${fmt(rec.cacheWrite)}${w}`,
-        `未缓存输入  ${fmt(rec.input)}`,
-        `缓存读取    ${fmt(rec.cacheRead)}`,
-        `缓存命中    ${pct(rec.hitRate)}`,
-        `推理        ${fmt(rec.reasoning)}`,
-        `输出        ${fmt(rec.output)}`,
-        rec.cost !== undefined ? `费用        $${rec.cost}` : null,
-        `${rec.model || ''}${rec.provider ? ' · ' + rec.provider : ''}`,
-    ].filter(Boolean).join('\n');
+function money(c) {
+    if (c === undefined || !Number.isFinite(c)) return null;
+    return `$${c >= 1 ? c.toFixed(2) : c >= 0.01 ? c.toFixed(3) : c.toFixed(4)}`;
 }
 
 function renderBadge(id) {
@@ -300,10 +282,19 @@ function renderBadge(id) {
     if (!getSettings().showBadge) return;
     const rec = ctx().chat[id]?.extra?.cache_usage;
     if (!rec) return;
-    const cls = rec.cacheRead > 0 ? 'cul-hit' : (rec.cacheWrite > 0 ? 'cul-write' : 'cul-miss');
-    const badge = $(`<div class="cul-badge ${cls}"></div>`)
-        .text(`写${short(rec.cacheWrite)} 读${short(rec.cacheRead)} 未${short(rec.input)} 出${short(rec.output)} ${pct(rec.hitRate)}`)
-        .attr('title', detailText(rec));
+    const rate = rec.hitRate || 0;
+    const chCls = rate >= 0.8 ? 'good' : rate >= 0.3 ? 'mid' : 'bad';
+    const seg = (cls, text) => `<span class="cul-${cls}">${text}</span>`;
+    const parts = [
+        seg('in', `↑${short(rec.input)}`),
+        seg('out', `↓${short(rec.output)}`),
+        seg('r', `R${short(rec.cacheRead)}`),
+        seg('w', `W${short(rec.cacheWrite)}`),
+        seg(`ch ${chCls}`, `CH${(rate * 100).toFixed(1)}%`),
+    ];
+    const cost = rec.cost !== undefined ? money(Number(rec.cost)) : null;
+    if (cost) parts.push(seg('cost', cost));
+    const badge = $(`<div class="cul-badge">${parts.join('')}</div>`);
     // 放在 .mes_buttons 外面（它默认悬停才显示），保证常驻可见
     const buttons = el.find('.mes_buttons').first();
     if (buttons.length) buttons.before(badge); else el.find('.ch_name').first().append(badge);
@@ -313,50 +304,6 @@ function renderAllBadges() {
     $('#chat .mes').each(function () {
         renderBadge($(this).attr('mesid'));
     });
-}
-
-function renderLast(rec) {
-    if (!rec) return '<div class="cul-empty">暂无记录（生成一次后出现）</div>';
-    if (!rec.found) return '<div class="cul-empty">上次请求没有返回 usage（非流式 Claude 会被 ST 后端丢弃，建议开启流式）</div>';
-    const w = rec.cacheWrite5m || rec.cacheWrite1h
-        ? ` <small>(5m ${rec.cacheWrite5m ?? 0} / 1h ${rec.cacheWrite1h ?? 0})</small>` : '';
-    const rows = [
-        ['总输入', fmt(rec.totalInput)],
-        ['缓存创建', fmt(rec.cacheWrite) + w],
-        ['未缓存输入', fmt(rec.input)],
-        ['缓存读取', fmt(rec.cacheRead)],
-        ['缓存命中', pct(rec.hitRate)],
-        ['推理', fmt(rec.reasoning)],
-        ['输出', fmt(rec.output)],
-    ];
-    if (rec.cost !== undefined) rows.push(['费用', `$${rec.cost}`]);
-    return `<div class="cul-grid">${rows.map(([k, v]) => `<div class="cul-k">${k}</div><div class="cul-v">${v}</div>`).join('')}</div>
-        <div class="cul-meta">${esc(rec.model)} ${rec.provider ? '· ' + esc(rec.provider) : ''} · ${new Date(rec.time).toLocaleString()}</div>`;
-}
-
-function renderHistory(records) {
-    if (!records.length) return '';
-    const head = '<tr><th>时间</th><th>写</th><th>读</th><th>未缓存</th><th>命中</th><th>输出</th></tr>';
-    const body = records.map((r) => r.found
-        ? `<tr title="${esc(r.model)}"><td>${new Date(r.time).toLocaleTimeString()}</td><td>${r.cacheWrite}</td><td>${r.cacheRead}</td><td>${r.input}</td><td>${pct(r.hitRate)}</td><td>${r.output}</td></tr>`
-        : `<tr><td>${new Date(r.time).toLocaleTimeString()}</td><td colspan="5">无 usage</td></tr>`).join('');
-    return `<table class="cul-table">${head}${body}</table>`;
-}
-
-function renderSummary(records) {
-    const ok = records.filter((r) => r.found);
-    if (!ok.length) return '';
-    const sum = (k) => ok.reduce((a, r) => a + (r[k] || 0), 0);
-    const total = sum('totalInput');
-    const cost = ok.some((r) => r.cost !== undefined) ? ` · 费用 $${sum('cost').toFixed(6)}` : '';
-    return `<div class="cul-meta">合计 ${ok.length} 次 · 写 ${sum('cacheWrite').toLocaleString()} · 读 ${sum('cacheRead').toLocaleString()} · 未缓存 ${sum('input').toLocaleString()} · 输出 ${sum('output').toLocaleString()} · 总命中 ${pct(total ? sum('cacheRead') / total : 0)}${cost}</div>`;
-}
-
-function render() {
-    const s = getSettings();
-    $('#cul_last').html(renderLast(s.records[0]));
-    $('#cul_summary').html(renderSummary(s.records));
-    $('#cul_history').html(renderHistory(s.records));
 }
 
 function buildSettingsHtml() {
@@ -369,18 +316,11 @@ function buildSettingsHtml() {
         </div>
         <div class="inline-drawer-content">
           <label class="checkbox_label"><input id="cul_enabled" type="checkbox" /><span>启用记录</span></label>
-          <label class="checkbox_label"><input id="cul_badge" type="checkbox" /><span>在消息编辑按钮旁常驻显示</span></label>
+          <label class="checkbox_label"><input id="cul_badge" type="checkbox" /><span>在消息上显示用量</span></label>
           <div class="cul-row">
-            <span>保留条数</span>
-            <input id="cul_max" class="text_pole" type="number" min="1" max="5000" style="width:80px" />
-            <div id="cul_clear" class="menu_button">清空</div>
             <div id="cul_export" class="menu_button">导出 JSON</div>
+            <div id="cul_clear" class="menu_button">清空记录</div>
           </div>
-          <h4>最近一次</h4>
-          <div id="cul_last"></div>
-          <h4>历史</h4>
-          <div id="cul_summary"></div>
-          <div id="cul_history" class="cul-history"></div>
         </div>
       </div>
     </div>`;
@@ -390,12 +330,7 @@ function bindUI() {
     const s = getSettings();
     $('#cul_enabled').prop('checked', s.enabled).on('change', function () { s.enabled = this.checked; save(); });
     $('#cul_badge').prop('checked', s.showBadge).on('change', function () { s.showBadge = this.checked; save(); renderAllBadges(); });
-    $('#cul_max').val(s.maxRecords).on('change', function () {
-        s.maxRecords = Math.max(1, Number(this.value) || DEFAULTS.maxRecords);
-        if (s.records.length > s.maxRecords) s.records.length = s.maxRecords;
-        save(); render();
-    });
-    $('#cul_clear').on('click', () => { s.records = []; save(); render(); });
+    $('#cul_clear').on('click', () => { s.records = []; save(); });
     $('#cul_export').on('click', () => {
         const blob = new Blob([JSON.stringify(s.records, null, 2)], { type: 'application/json' });
         const a = document.createElement('a');
@@ -411,7 +346,6 @@ jQuery(() => {
         getSettings();
         $('#extensions_settings2').append(buildSettingsHtml());
         bindUI();
-        render();
         installFetchHook();
 
         const { eventSource, event_types } = ctx();

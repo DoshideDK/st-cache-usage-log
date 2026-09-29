@@ -1,7 +1,3 @@
-.cache-usage-log-settings h4 {
-    margin: 8px 0 4px;
-}
-
 .cache-usage-log-settings .checkbox_label {
     display: flex;
     align-items: center;
@@ -15,66 +11,33 @@
     margin: 6px 0;
 }
 
-.cache-usage-log-settings .cul-grid {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 2px 12px;
-}
-
-.cache-usage-log-settings .cul-k {
-    opacity: 0.7;
-}
-
-.cache-usage-log-settings .cul-v {
-    font-weight: bold;
-    font-family: monospace;
-}
-
-.cache-usage-log-settings .cul-meta,
-.cache-usage-log-settings .cul-empty {
-    opacity: 0.7;
-    font-size: 0.85em;
-    margin: 4px 0;
-}
-
-.cache-usage-log-settings .cul-history {
-    max-height: 300px;
-    overflow-y: auto;
-}
-
-.cache-usage-log-settings .cul-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.85em;
-    font-family: monospace;
-}
-
-.cache-usage-log-settings .cul-table th,
-.cache-usage-log-settings .cul-table td {
-    padding: 2px 4px;
-    text-align: right;
-    border-bottom: 1px solid var(--SmartThemeBorderColor, #444);
-}
-
-/* 消息按钮栏旁的用量徽章（常驻显示，不依赖悬停） */
+/* 消息上的用量条（常驻显示，放在悬停按钮栏外） */
 .mes .cul-badge {
     display: inline-flex !important;
-    opacity: 1 !important;
     visibility: visible !important;
-    flex-shrink: 0;
+    opacity: 1 !important;
+    align-items: center;
     align-self: center;
+    flex-shrink: 0;
+    gap: 0.7em;
     margin: 0 6px;
-    padding: 0 4px;
-    font-size: 0.75em;
-    font-family: monospace;
+    padding: 1px 8px;
+    border-radius: 6px;
+    background: rgba(127, 127, 127, 0.1);
+    font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 0.72em;
+    line-height: 1.6;
     white-space: nowrap;
-    cursor: default;
+    color: var(--SmartThemeBodyColor, #ccc);
+    user-select: none;
 }
 
-.mes .cul-badge.cul-hit {
-    color: #6c6;
-}
-
-.mes .cul-badge.cul-write {
-    color: #e9a;
-}
+.mes .cul-badge > span { opacity: 0.9; }
+.mes .cul-badge .cul-in   { color: #8ab4f8; }
+.mes .cul-badge .cul-out  { color: #c3a6ff; }
+.mes .cul-badge .cul-r    { color: #7fd1ae; }
+.mes .cul-badge .cul-w    { color: #e6c07b; }
+.mes .cul-badge .cul-ch.good { color: #7fd1ae; }
+.mes .cul-badge .cul-ch.mid  { color: #e6c07b; }
+.mes .cul-badge .cul-ch.bad  { color: #ef8a8a; }
+.mes .cul-badge .cul-cost { color: var(--SmartThemeBodyColor, #ccc); opacity: 0.65; }
