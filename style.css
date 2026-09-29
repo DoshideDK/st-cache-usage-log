@@ -33,6 +33,7 @@
 }
 
 .mes .cul-badge > span { opacity: 0.9; }
+.mes .cul-badge .cul-total { color: var(--SmartThemeBodyColor, #ccc); font-weight: 600; }
 .mes .cul-badge .cul-in   { color: #8ab4f8; }
 .mes .cul-badge .cul-out  { color: #c3a6ff; }
 .mes .cul-badge .cul-r    { color: #7fd1ae; }

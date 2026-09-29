@@ -325,7 +325,9 @@ function renderBadge(id) {
     const rate = rec.hitRate || 0;
     const chCls = rate >= 0.8 ? 'good' : rate >= 0.3 ? 'mid' : 'bad';
     const seg = (cls, text) => `<span class="cul-${cls}">${text}</span>`;
+    const total = rec.totalInput ?? ((rec.input || 0) + (rec.cacheRead || 0) + (rec.cacheWrite || 0));
     const parts = [
+        seg('total', `Σ${short(total)}`),
         seg('in', `↑${short(rec.input)}`),
         seg('out', `↓${short(rec.output)}`),
         seg('r', `R${short(rec.cacheRead)}`),
