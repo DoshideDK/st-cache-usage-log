@@ -23,7 +23,7 @@ SillyTavern 第三方扩展：只记录每次生成返回的 usage —— 缓存
 
 ## 安装
 
-扩展 → 安装扩展 → 填本仓库地址；或者把本目录复制/软链到
+扩展 → 安装扩展 → 填 `https://github.com/DoshideDK/st-cache-usage-log`；或者把本目录复制/软链到
 `SillyTavern/public/scripts/extensions/third-party/st-cache-usage-log`（或 `data/<用户>/extensions/`）后刷新页面。
 
 设置面板在「扩展」页右侧栏：「缓存用量记录」。记录保存在扩展设置里，可设置保留条数、清空、导出 JSON。
