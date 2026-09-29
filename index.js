@@ -3,6 +3,7 @@
  * SillyTavern 第三方 UI 扩展
  *
  * 只做一件事：记录每次生成返回的 usage（缓存写入 / 缓存读取 / 未缓存输入 / 输出 / 推理 / 费用）。
+ * 结果写进该条 AI 消息的 extra.cache_usage（随聊天存档持久化），显示在消息编辑按钮旁。
  *
  * 原理：包装 window.fetch，拦截 /api/backends/chat-completions/generate 的响应，
  *       clone 一份在后台解析，不影响酒馆原本的处理。
@@ -21,7 +22,7 @@ const TARGET_PATH = '/api/backends/chat-completions/generate';
 
 const DEFAULTS = {
     enabled: true,
-    toast: true,
+    showBadge: true,
     maxRecords: 200,
     records: [],
 };
@@ -181,13 +182,49 @@ function addRecord(rec) {
     save();
     render();
     console.log(LOG, rec);
-    if (s.toast && rec.found) {
-        toastr.info(
-            `写 ${fmt(rec.cacheWrite)} · 读 ${fmt(rec.cacheRead)} · 未缓存 ${fmt(rec.input)} · 命中 ${pct(rec.hitRate)} · 输出 ${fmt(rec.output)}`,
-            '缓存用量',
-            { timeOut: 4000 },
-        );
+    if (rec.found) {
+        pending.usage = rec;
+        tryAttach();
     }
+}
+
+// ------------------------------------------------------------
+//  挂到消息上（写进 message.extra，随聊天文件持久化）
+// ------------------------------------------------------------
+// usage 解析完成 和 MESSAGE_RECEIVED 谁先到不确定，两边都到齐再挂
+const pending = { usage: null, messageId: null };
+
+function tryAttach() {
+    if (!pending.usage || pending.messageId === null) return;
+    const { chat, saveChat } = ctx();
+    const id = pending.messageId;
+    const msg = chat[id];
+    const usage = pending.usage;
+    pending.usage = null;
+    pending.messageId = null;
+    if (!msg || msg.is_user) return;
+
+    msg.extra = msg.extra || {};
+    msg.extra.cache_usage = usage;
+    // 同步到当前 swipe，切换 swipe 时各自保留
+    const sw = msg.swipe_info?.[msg.swipe_id];
+    if (sw) {
+        sw.extra = sw.extra || {};
+        sw.extra.cache_usage = usage;
+    }
+    saveChat();
+    renderBadge(id);
+}
+
+function onGenerationStarted(type, _opts, dryRun) {
+    if (dryRun) return;
+    pending.usage = null;
+    pending.messageId = null;
+}
+
+function onMessageReceived(id) {
+    pending.messageId = Number(id);
+    tryAttach();
 }
 
 // ------------------------------------------------------------
@@ -234,6 +271,47 @@ function pct(r) {
 }
 function esc(s) {
     return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+function short(n) {
+    n = Number(n) || 0;
+    return n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+}
+
+function detailText(rec) {
+    const w = rec.cacheWrite5m || rec.cacheWrite1h ? ` (5m ${rec.cacheWrite5m ?? 0} / 1h ${rec.cacheWrite1h ?? 0})` : '';
+    return [
+        `总输入      ${fmt(rec.totalInput)}`,
+        `缓存创建    ${fmt(rec.cacheWrite)}${w}`,
+        `未缓存输入  ${fmt(rec.input)}`,
+        `缓存读取    ${fmt(rec.cacheRead)}`,
+        `缓存命中    ${pct(rec.hitRate)}`,
+        `推理        ${fmt(rec.reasoning)}`,
+        `输出        ${fmt(rec.output)}`,
+        rec.cost !== undefined ? `费用        $${rec.cost}` : null,
+        `${rec.model || ''}${rec.provider ? ' · ' + rec.provider : ''}`,
+    ].filter(Boolean).join('\n');
+}
+
+function renderBadge(id) {
+    const el = $(`#chat .mes[mesid="${id}"]`);
+    if (!el.length) return;
+    el.find('.cul-badge').remove();
+    if (!getSettings().showBadge) return;
+    const rec = ctx().chat[id]?.extra?.cache_usage;
+    if (!rec) return;
+    const cls = rec.cacheRead > 0 ? 'cul-hit' : (rec.cacheWrite > 0 ? 'cul-write' : 'cul-miss');
+    const badge = $(`<div class="mes_button cul-badge ${cls}"></div>`)
+        .text(`写${short(rec.cacheWrite)} 读${short(rec.cacheRead)} 未${short(rec.input)} ${pct(rec.hitRate)}`)
+        .attr('title', detailText(rec));
+    const edit = el.find('.mes_buttons .mes_edit');
+    if (edit.length) edit.before(badge); else el.find('.mes_buttons').append(badge);
+}
+
+function renderAllBadges() {
+    $('#chat .mes').each(function () {
+        renderBadge($(this).attr('mesid'));
+    });
 }
 
 function renderLast(rec) {
@@ -290,7 +368,7 @@ function buildSettingsHtml() {
         </div>
         <div class="inline-drawer-content">
           <label class="checkbox_label"><input id="cul_enabled" type="checkbox" /><span>启用记录</span></label>
-          <label class="checkbox_label"><input id="cul_toast" type="checkbox" /><span>每次生成后弹出提示</span></label>
+          <label class="checkbox_label"><input id="cul_badge" type="checkbox" /><span>在消息编辑按钮旁显示（悬停看详情）</span></label>
           <div class="cul-row">
             <span>保留条数</span>
             <input id="cul_max" class="text_pole" type="number" min="1" max="5000" style="width:80px" />
@@ -310,7 +388,7 @@ function buildSettingsHtml() {
 function bindUI() {
     const s = getSettings();
     $('#cul_enabled').prop('checked', s.enabled).on('change', function () { s.enabled = this.checked; save(); });
-    $('#cul_toast').prop('checked', s.toast).on('change', function () { s.toast = this.checked; save(); });
+    $('#cul_badge').prop('checked', s.showBadge).on('change', function () { s.showBadge = this.checked; save(); renderAllBadges(); });
     $('#cul_max').val(s.maxRecords).on('change', function () {
         s.maxRecords = Math.max(1, Number(this.value) || DEFAULTS.maxRecords);
         if (s.records.length > s.maxRecords) s.records.length = s.maxRecords;
@@ -334,6 +412,16 @@ jQuery(() => {
         bindUI();
         render();
         installFetchHook();
+
+        const { eventSource, event_types } = ctx();
+        eventSource.on(event_types.GENERATION_STARTED, onGenerationStarted);
+        eventSource.on(event_types.MESSAGE_RECEIVED, onMessageReceived);
+        eventSource.on(event_types.CHARACTER_MESSAGE_RENDERED, (id) => renderBadge(id));
+        for (const ev of [event_types.CHAT_CHANGED, event_types.MORE_MESSAGES_LOADED, event_types.MESSAGE_SWIPED,
+            event_types.MESSAGE_UPDATED, event_types.MESSAGE_DELETED]) {
+            eventSource.on(ev, () => setTimeout(renderAllBadges, 0));
+        }
+        renderAllBadges();
         console.log(LOG, '已加载');
     } catch (e) {
         console.error(LOG, '初始化失败', e);

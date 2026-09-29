@@ -55,3 +55,20 @@
     text-align: right;
     border-bottom: 1px solid var(--SmartThemeBorderColor, #444);
 }
+
+/* 消息按钮栏里的用量徽章 */
+.mes_buttons .cul-badge {
+    font-size: 0.75em;
+    font-family: monospace;
+    white-space: nowrap;
+    align-self: center;
+    cursor: help;
+}
+
+.mes_buttons .cul-badge.cul-hit {
+    color: #6c6;
+}
+
+.mes_buttons .cul-badge.cul-write {
+    color: #e9a;
+}
