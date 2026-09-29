@@ -23,6 +23,9 @@ const TARGET_PATH = '/api/backends/chat-completions/generate';
 const DEFAULTS = {
     enabled: true,
     showBadge: true,
+    // 缓存口径（同 CPA-Manager-Plus 的 cache_input_mode）：
+    //   auto | separate_from_input | included_in_input | read_included_creation_separate
+    cacheInputMode: 'auto',
     maxRecords: 200,
     records: [],
 };
@@ -72,8 +75,8 @@ function mergeUsage(acc, u) {
 
     // Claude
     set('input', u.input_tokens);
-    set('cacheWrite', u.cache_creation_input_tokens);
-    set('cacheRead', u.cache_read_input_tokens);
+    set('cacheWrite', u.cache_creation_input_tokens ?? u.cache_creation_tokens ?? u.cache_write_tokens);
+    set('cacheRead', u.cache_read_input_tokens ?? u.cache_read_tokens);
     set('output', u.output_tokens);
     set('reasoning', u.output_tokens_details?.thinking_tokens);
     if (u.cache_creation) {
@@ -84,13 +87,11 @@ function mergeUsage(acc, u) {
     // OpenAI 兼容
     if (u.prompt_tokens !== undefined) {
         acc.format = acc.format || 'openai';
-        // OpenAI 格式的 prompt_tokens 是总输入，已经包含缓存读取和缓存写入，
-        // 未缓存输入 = 总 - R - W（否则 W 会被重复计入 ↑ 和总输入）
-        const cached = num(u.prompt_tokens_details?.cached_tokens) ?? 0;
-        const written = num(u.prompt_tokens_details?.cache_write_tokens) ?? 0;
-        set('cacheRead', cached);
-        set('cacheWrite', written);
-        set('input', Math.max(0, (num(u.prompt_tokens) ?? 0) - cached - written));
+        // OpenAI 口径：prompt_tokens 是总输入（included_in_input），在 finalize 里统一减
+        const d = u.prompt_tokens_details || {};
+        set('cacheRead', d.cached_tokens ?? d.cache_read_tokens);
+        set('cacheWrite', d.cache_write_tokens ?? d.cache_creation_tokens);
+        set('input', u.prompt_tokens);
     }
     set('output', u.completion_tokens);
     set('reasoning', u.completion_tokens_details?.reasoning_tokens);
@@ -153,14 +154,44 @@ async function parseJson(response, acc) {
 // ------------------------------------------------------------
 //  记录
 // ------------------------------------------------------------
+const MODE_SEPARATE = 'separate_from_input';
+const MODE_INCLUDED = 'included_in_input';
+const MODE_READ_INCLUDED = 'read_included_creation_separate';
+
+/**
+ * 判定缓存口径（参考 CPA-Manager-Plus InferCacheInputMode）。
+ * 前端拿不到 executor_type，所以 auto 模式：
+ *   - OpenAI 格式：prompt_tokens 必含缓存 → included
+ *   - Claude 格式：原生是 separate，但部分中转/上游会把缓存算进 input_tokens。
+ *     有缓存且 input_tokens ≥ R+W 时视为 included，否则 separate。
+ */
+function inferMode(acc, rawInput, cacheRead, cacheWrite) {
+    const setting = getSettings().cacheInputMode;
+    if (setting && setting !== 'auto') return setting;
+    if (acc.format === 'openai') return MODE_INCLUDED;
+    const cached = cacheRead + cacheWrite;
+    if (cached > 0 && rawInput >= cached) return MODE_INCLUDED;
+    return MODE_SEPARATE;
+}
+
+/** 同 CPA-Manager-Plus NormalizeCacheAccounting */
+function normalizeCache(mode, rawInput, cacheRead, cacheWrite) {
+    switch (mode) {
+        case MODE_INCLUDED:
+            return { input: Math.max(0, rawInput - cacheRead - cacheWrite), totalInput: rawInput };
+        case MODE_READ_INCLUDED:
+            return { input: Math.max(0, rawInput - cacheRead), totalInput: rawInput + cacheWrite };
+        default:
+            return { input: rawInput, totalInput: rawInput + cacheRead + cacheWrite };
+    }
+}
+
 function finalize(acc, reqInfo) {
     const cacheWrite = acc.cacheWrite ?? 0;
     const cacheRead = acc.cacheRead ?? 0;
-    // Claude 格式：按实际接入的中转（cliproxyapi）行为，input_tokens 视为总输入，
-    // ↑ 未缓存输入 = 总 - R - W（OpenAI 格式已在 mergeUsage 里减过）
-    let input = acc.input ?? 0;
-    if (acc.format !== 'openai') input = Math.max(0, input - cacheRead - cacheWrite);
-    const totalInput = input + cacheWrite + cacheRead;
+    const rawInput = acc.input ?? 0;
+    const cacheInputMode = inferMode(acc, rawInput, cacheRead, cacheWrite);
+    const { input, totalInput } = normalizeCache(cacheInputMode, rawInput, cacheRead, cacheWrite);
     return {
         time: Date.now(),
         model: acc.model || reqInfo.model || '',
@@ -169,6 +200,8 @@ function finalize(acc, reqInfo) {
         format: acc.format || '',
         stream: reqInfo.stream,
         found: !!acc.found,
+        cacheInputMode,
+        rawInput,
         totalInput,
         cacheWrite,
         cacheWrite5m: acc.cacheWrite5m,
@@ -324,6 +357,13 @@ function buildSettingsHtml() {
         <div class="inline-drawer-content">
           <label class="checkbox_label"><input id="cul_enabled" type="checkbox" /><span>启用记录</span></label>
           <label class="checkbox_label"><input id="cul_badge" type="checkbox" /><span>在消息上显示用量</span></label>
+          <label for="cul_mode">缓存口径（input_tokens 是否含缓存）</label>
+          <select id="cul_mode" class="text_pole">
+            <option value="auto">自动（推荐）</option>
+            <option value="separate_from_input">不含缓存：↑ = input（原生 Claude）</option>
+            <option value="included_in_input">含缓存：↑ = input − R − W（OpenAI 等）</option>
+            <option value="read_included_creation_separate">含读取不含写入：↑ = input − R</option>
+          </select>
           <div class="cul-row">
             <div id="cul_export" class="menu_button">导出 JSON</div>
             <div id="cul_clear" class="menu_button">清空记录</div>
@@ -337,6 +377,7 @@ function bindUI() {
     const s = getSettings();
     $('#cul_enabled').prop('checked', s.enabled).on('change', function () { s.enabled = this.checked; save(); });
     $('#cul_badge').prop('checked', s.showBadge).on('change', function () { s.showBadge = this.checked; save(); renderAllBadges(); });
+    $('#cul_mode').val(s.cacheInputMode || 'auto').on('change', function () { s.cacheInputMode = this.value; save(); });
     $('#cul_clear').on('click', () => { s.records = []; save(); });
     $('#cul_export').on('click', () => {
         const blob = new Blob([JSON.stringify(s.records, null, 2)], { type: 'application/json' });
