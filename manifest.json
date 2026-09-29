@@ -1,0 +1,13 @@
+{
+    "display_name": "缓存用量记录 (Cache Usage Log)",
+    "loading_order": 10001,
+    "requires": [],
+    "optional": [],
+    "dependencies": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "dk",
+    "version": "0.1.0",
+    "homePage": "",
+    "auto_update": false
+}

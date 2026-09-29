@@ -1,0 +1,57 @@
+.cache-usage-log-settings h4 {
+    margin: 8px 0 4px;
+}
+
+.cache-usage-log-settings .checkbox_label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.cache-usage-log-settings .cul-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 6px 0;
+}
+
+.cache-usage-log-settings .cul-grid {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 12px;
+}
+
+.cache-usage-log-settings .cul-k {
+    opacity: 0.7;
+}
+
+.cache-usage-log-settings .cul-v {
+    font-weight: bold;
+    font-family: monospace;
+}
+
+.cache-usage-log-settings .cul-meta,
+.cache-usage-log-settings .cul-empty {
+    opacity: 0.7;
+    font-size: 0.85em;
+    margin: 4px 0;
+}
+
+.cache-usage-log-settings .cul-history {
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.cache-usage-log-settings .cul-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85em;
+    font-family: monospace;
+}
+
+.cache-usage-log-settings .cul-table th,
+.cache-usage-log-settings .cul-table td {
+    padding: 2px 4px;
+    text-align: right;
+    border-bottom: 1px solid var(--SmartThemeBorderColor, #444);
+}
